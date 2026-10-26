@@ -1,5 +1,5 @@
 [build]
-  base = "SessionExchange"
+  base = "."
   command = "npm run build"
   publish = "public"
 
