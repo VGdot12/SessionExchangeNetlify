@@ -6,11 +6,13 @@ A student session exchange with PGID entry, a public swap board, and private req
 
 Upload the flat-root release contents into your existing GitHub repository and follow [`START_HERE.md`](START_HERE.md). The supplied netlify.toml sets base directory `.`, build command `npm run build`, publish directory `public`, and functions directory `netlify/functions`. The JavaScript API and persistent shared state run on Netlify. No Python host is needed.
 
-## Direct Outlook cloud import
+## Outlook through Power Automate
 
-Follow [`CLOUD_OUTLOOK_SETUP.md`](CLOUD_OUTLOOK_SETUP.md) for the one-time Microsoft 365 application authorization and Netlify environment settings. A scheduled function checks every five minutes, without Excel or a local computer. Only casevents@isb.edu emails whose subject contains `Upcoming Event | PGP Co 2027 | Pre Placement Talk :` are eligible. Spacing and case differences are accepted.
+Follow [POWER_AUTOMATE_SETUP.md](POWER_AUTOMATE_SETUP.md). Your normal Outlook connection sends matching new emails to a protected Netlify endpoint, without Excel, a local computer or a custom Microsoft app registration. The receiving endpoint is `/api/integrations/outlook`. It uses a separate ingest-only SWAP_FLOW_TOKEN; the private `/outlook-admin.html` dashboard uses SWAP_ADMIN_TOKEN.
 
-The importer saves title, room, date and start/end time. It appends new events, preserves existing IDs when it can match the event, and retains all swap history. Cancellations, reschedules and ambiguous details require coordinator review at `/outlook-admin.html`, protected by SWAP_ADMIN_TOKEN. Microsoft credentials stay in server-side environment settings. Cloud import is disabled until configured.
+Only casevents@isb.edu emails whose subject contains `Upcoming Event | PGP Co 2027 | Pre Placement Talk :` are imported. The app saves title, room, date and start/end time, appends new events, and retains existing sessions and accepted history. Cancellations and unclear corrections enter review. Your Power Automate license and organization must allow the Outlook and HTTP actions.
+
+The earlier application-credential scheduled importer is still optional; its separate guide is [CLOUD_OUTLOOK_SETUP.md](CLOUD_OUTLOOK_SETUP.md). It is inactive when Power Automate is enabled.
 
 ## Try the prototype
 

@@ -1,3 +1,5 @@
+For the current Power Automate setup without a custom Microsoft app, use [POWER_AUTOMATE_SETUP.md](POWER_AUTOMATE_SETUP.md). The optional administrator-approved connection below is a different method.
+
 # Outlook to SessionExchange, without Excel
 
 The code is ready for a Microsoft 365 work or school mailbox in Exchange Online. It is not activated until your administrator grants access and you configure Netlify. This application connection does not use your Outlook password, a personal Outlook.com account, a local script or a Codex scheduled task.

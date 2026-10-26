@@ -4,6 +4,7 @@ import {
 } from './model.mjs';
 import { adminStatus, reviewMessage, deactivateSession } from './outlook.mjs';
 import { resetOutlookScan } from './outlook-sync.mjs';
+import { receivePowerAutomate } from './power-automate.mjs';
 
 const securityHeaders = {
   'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
@@ -66,6 +67,12 @@ export function createHandler(repository, options = {}) {
         if (response.error) throw new Problem(response.error, response.status);
         headers['Set-Cookie'] = cookie(request, response.token);
         result = { ok: true };
+      } else if (path === '/api/integrations/outlook' && method === 'POST') {
+        const integration = options.powerAutomate || {};
+        if (!integration.enabled) throw new Problem('Set SWAP_POWER_AUTOMATE_ENABLED=1 in Netlify and redeploy to enable this endpoint.', 503);
+        if (integration.production === false) throw new Problem('Power Automate delivery is only allowed on the production site.', 403);
+        if ((integration.token || '').length < 32 || !secureEqual(request.headers.get('authorization') || '', `Bearer ${integration.token}`)) throw new Problem('Invalid Power Automate token. Check SWAP_FLOW_TOKEN and the HTTP Authorization header.', 403);
+        result = await repository.mutate(d => receivePowerAutomate(d, data));
       } else if (path === '/api/admin/import' && method === 'POST') {
         const secret = options.adminToken || '';
         if (secret.length < 32 || !secureEqual(request.headers.get('authorization') || '', `Bearer ${secret}`)) throw new Problem('Invalid sync token.', 403);

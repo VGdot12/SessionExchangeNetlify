@@ -16,6 +16,12 @@ export function outlookConfiguration(env = process.env) {
 }
 
 export function publicConfiguration(env = process.env) {
+  if (env.SWAP_POWER_AUTOMATE_ENABLED === '1') {
+    const configured = (env.SWAP_FLOW_TOKEN || '').length >= 32;
+    return { enabled:true, configured, mode:'power-automate', can_run:false, sender:'casevents@isb.edu', subject_rule:SUBJECT_RULE,
+      mailbox:'Connected through Power Automate', folder:'Selected in your flow',
+      ...(!configured ? {configuration_error:'Set SWAP_FLOW_TOKEN to a random secret of at least 32 characters and redeploy.'} : {}) };
+  }
   try {
     const c = outlookConfiguration(env);
     return { enabled: c.enabled, configured: c.enabled, mailbox: c.mailbox || '', folder: c.folder, sender: c.sender, subject_rule: SUBJECT_RULE };

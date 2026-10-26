@@ -16,12 +16,15 @@ async function api(path, body) {
 async function refresh() {
   const data = await api('status');
   configured = data.configured;
+  const pushed = data.mode === 'power-automate';
+  $('#run').hidden = pushed; $('#reset').hidden = pushed;
+  $('#intro').textContent = pushed ? 'Power Automate sends matching invites when they arrive. To test delivery or import an existing email, use Power Automate. This page shows delivery status and the review queue.' : 'The Microsoft application connection checks Outlook every five minutes after setup.';
   $('#login').hidden = true; $('#dashboard').hidden = false;
   const rows = [['Connection', data.enabled ? data.configured ? 'Configured' : 'Needs setup' : 'Disabled'],
     ['Mailbox',data.mailbox || 'Not configured'],['Folder',data.folder || 'inbox'],['Sender',data.sender || 'casevents@isb.edu'],['Subject contains',data.subject_rule || 'Upcoming Event | PGP Co 2027 | Pre Placement Talk :'],
-    ['Last successful page',date(data.last_success)],['Checked emails through',date(data.checked_through)],
-    ['Scan',data.catching_up ? 'Catching up; next run resumes automatically' : 'No unfinished scan'],
-    ['Last page results',data.last_counts ? Object.entries(data.last_counts).map(([k,v])=>`${k}: ${v}`).join(' · ') : 'None yet'],
+    [pushed?'Last successful delivery':'Last successful page',date(data.last_success)],
+    ...(pushed ? [['Delivery mode','New email → Power Automate → Netlify']] : [['Checked emails through',date(data.checked_through)],['Scan',data.catching_up ? 'Catching up; next run resumes automatically' : 'No unfinished scan']]),
+    ['Last delivery results',data.last_counts ? Object.entries(data.last_counts).map(([k,v])=>`${k}: ${v}`).join(' · ') : 'None yet'],
     ['Attention',data.configuration_error || data.last_error || 'No connection errors recorded']];
   $('#summary').innerHTML = '<dl>'+rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')+'</dl>';
   $('#run').disabled = !data.configured;

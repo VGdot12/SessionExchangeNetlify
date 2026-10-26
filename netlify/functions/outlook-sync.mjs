@@ -3,6 +3,7 @@ import { outlookConfiguration, runOutlookSync } from '../lib/outlook-sync.mjs';
 
 export default async function scheduledOutlook(request, context = {}) {
   if (deploymentContext(context) !== 'production') return;
+  if (process.env.SWAP_POWER_AUTOMATE_ENABLED === '1') return;
   try {
     const configuration = outlookConfiguration();
     if (!configuration.enabled) return;
