@@ -14,6 +14,24 @@ HEADERS = {
     'Students': ['pgid', 'name'],
     'Assignments': ['pgid', 'session_id'],
 }
+SIMPLE_HEADERS = ['title', 'room', 'time', 'date']
+
+
+def simple_session(record, row_number):
+    """Expand the four user-facing columns into the internal event schema."""
+    match = re.fullmatch(r'\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*', record['time'])
+    if not match:
+        raise Problem(f'Sessions row {row_number}: time must be a 24-hour range, e.g. 21:30 - 22:30.')
+    try:
+        day = date.fromisoformat(record['date']).isoformat()
+        start, end = [time.fromisoformat(value.zfill(5)).isoformat(timespec='minutes') for value in match.groups()]
+    except ValueError:
+        raise Problem(f'Sessions row {row_number}: use YYYY-MM-DD dates and valid 24-hour times.')
+    # Room/end-time corrections and row reordering must preserve open requests.
+    identity = json.dumps([record['title'].casefold(), day, start], ensure_ascii=False)
+    sid = 'event-' + hashlib.sha256(identity.encode()).hexdigest()[:32]
+    return dict(session_id=sid, course_id=sid, title=record['title'], section='Main',
+                date=day, start_time=start, end_time=end, room=record['room'], instructor='')
 
 
 def read_excel(path):
@@ -39,6 +57,9 @@ def read_excel(path):
             headers = [str(v).strip().lower() if v is not None else '' for v in next(rows, [])]
             if len([h for h in headers if h]) != len(set(h for h in headers if h)):
                 raise Problem(f'{sheet_name}: duplicate column headings.')
+            simple = sheet_name == 'Sessions' and 'time' in headers and 'session_id' not in headers
+            if simple:
+                required = SIMPLE_HEADERS
             if any(h not in headers for h in required):
                 raise Problem(f'{sheet_name}: required columns are {", ".join(required)}.')
             items = []
@@ -59,7 +80,7 @@ def read_excel(path):
                     elif isinstance(value, float) and value.is_integer():
                         value = str(int(value))
                     record[key] = '' if value is None else str(value).strip()
-                items.append(record)
+                items.append(simple_session(record, row_number) if simple else record)
             output[sheet_name.lower()] = items
         return validate(output)
     finally:

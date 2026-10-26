@@ -115,7 +115,7 @@ def append_to_workbook(path, result):
     import os
     import tempfile
     from openpyxl import Workbook, load_workbook
-    from .importer import HEADERS, read_excel
+    from .importer import HEADERS, read_excel, simple_session
     path = Path(path)
     if path.suffix.lower() != '.xlsx':
         raise Problem('Choose an .xlsx destination.')
@@ -127,13 +127,15 @@ def append_to_workbook(path, result):
         workbook.active.title = 'Sessions'
         workbook.active.append(HEADERS['Sessions'])
     sheet = workbook['Sessions']
-    if result.get('source'):
+    headers = [str(cell.value).strip().lower() if cell.value is not None else '' for cell in sheet[1]]
+    simple = 'time' in headers and 'session_id' not in headers
+    if result.get('source') and not simple:
         extra_headers = ['company', 'industry', 'event_type', 'mode', 'source_message_id', 'source_received_at', 'source_subject']
         existing = [cell.value for cell in sheet[1]]
         for heading in extra_headers:
             if heading not in existing:
                 sheet.cell(1, sheet.max_column + 1, heading)
-    headers = [cell.value for cell in sheet[1]]
+    headers = [str(cell.value).strip().lower() if cell.value is not None else '' for cell in sheet[1]]
     row = dict(result['session'])
     extracted = result.get('extracted', {})
     for heading in ('company', 'industry', 'event_type', 'mode'):
@@ -143,8 +145,18 @@ def append_to_workbook(path, result):
     for key, heading in [('id', 'source_message_id'), ('received_at', 'source_received_at'), ('subject', 'source_subject')]:
         if key in source:
             row[heading] = source[key]
-    index = headers.index('session_id') + 1
-    target = next((i for i in range(2, sheet.max_row+1) if sheet.cell(i,index).value == row['session_id']), sheet.max_row+1)
+    if simple:
+        row['time'] = f'{row["start_time"]} - {row["end_time"]}'
+        normalized = simple_session(row, 2)
+        current = read_excel(path)['sessions']
+        # read_excel skips empty rows, so map back to the actual worksheet rows.
+        occupied = [i for i in range(2, sheet.max_row+1) if any(
+            cell.value is not None and str(cell.value).strip() for cell in sheet[i])]
+        target = next((i for i, event in zip(occupied, current)
+                       if event['session_id'] == normalized['session_id']), sheet.max_row+1)
+    else:
+        index = headers.index('session_id') + 1
+        target = next((i for i in range(2, sheet.max_row+1) if sheet.cell(i,index).value == row['session_id']), sheet.max_row+1)
     for column, heading in enumerate(headers, 1):
         if heading in row:
             value = row[heading]

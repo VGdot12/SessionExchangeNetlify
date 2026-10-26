@@ -71,7 +71,8 @@ def import_messages(messages, workbook, state_path, apply=False):
         state = json.loads(state_path.read_text()) if state_path.exists() else {'processed': {}, 'reviews': []}
         report = {'updated': [], 'skipped': 0, 'reviews': [], 'dry_run': not apply}
         # Sources written previously protect against older messages overwriting newer data.
-        latest = {}
+        # The four-column workbook keeps provenance in this private checkpoint.
+        latest = {sid: timestamp(value) for sid, value in state.get('latest_events', {}).items()}
         if workbook.exists():
             from openpyxl import load_workbook
             wb = load_workbook(workbook, read_only=True, data_only=False)
@@ -81,7 +82,8 @@ def import_messages(messages, workbook, state_path, apply=False):
                 for values in rows:
                     row = dict(zip(headings, values))
                     if row.get('session_id') and row.get('source_received_at'):
-                        latest[row['session_id']] = timestamp(row['source_received_at'])
+                        sid = row['session_id']
+                        latest[sid] = max(latest.get(sid, timestamp(row['source_received_at'])), timestamp(row['source_received_at']))
             finally:
                 wb.close()
         for message in sorted(messages, key=lambda m: timestamp(m['received_at'])):
@@ -124,6 +126,7 @@ def import_messages(messages, workbook, state_path, apply=False):
                     if apply:
                         append_to_workbook(workbook, result)
                     latest[sid] = received
+                    state.setdefault('latest_events', {})[sid] = message['received_at']
                     report['updated'].append(sid)
                     state['reviews'] = [r for r in state['reviews'] if r['message_id'] != message['id']]
             state['processed'][key] = dict(digest=digest, received_at=message['received_at'])
