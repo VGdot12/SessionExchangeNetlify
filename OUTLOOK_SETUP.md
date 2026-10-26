@@ -1,4 +1,8 @@
-# Outlook intake plan
+# Optional local Outlook tools
+
+For the current cloud import WITHOUT Excel, use [CLOUD_OUTLOOK_SETUP.md](CLOUD_OUTLOOK_SETUP.md). The Netlify scheduled function runs independently of these older local tools. The documentation below describes only the optional legacy Excel workflow.
+
+## Legacy intake plan
 
 The supplied screenshot shows an invite from `casevents@isb.edu` with a subject starting `Upcoming Event | PGP Co 2027 | Pre Placement Talk`. Its body uses labelled fields. It announces an event but does not list assigned students or PGIDs. Those details are entered by students in this prototype.
 

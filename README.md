@@ -4,11 +4,13 @@ A student session exchange with PGID entry, a public swap board, and private req
 
 ## Deploy on Netlify
 
-Use the **SessionExchange-Netlify.zip** replacement package and follow [`DEPLOY_NETLIFY.md`](DEPLOY_NETLIFY.md). It matches the existing repository's `SessionExchange/` folder. Its root `netlify.toml` points Netlify to that folder, builds `public/index.html`, and bundles the JavaScript API with persistent shared storage in Netlify Blobs. No separate Python host or database account is needed for this prototype.
+Upload the flat-root release contents into your existing GitHub repository and follow [`START_HERE.md`](START_HERE.md). The supplied netlify.toml sets base directory `.`, build command `npm run build`, publish directory `public`, and functions directory `netlify/functions`. The JavaScript API and persistent shared state run on Netlify. No Python host is needed.
 
-The effective settings are base directory `SessionExchange`, build command `npm run build`, publish directory `public`, and functions directory `netlify/functions`. Run a Git-connected build, including the backend function. Publishing only the static files leaves swap operations unavailable.
+## Direct Outlook cloud import
 
-For a standalone checkout where `package.json` and `netlify.toml` are already at the repository root, leave Base directory blank; the remaining paths stay the same. The Netlify replacement ZIP uses the nested layout above to match the repository you uploaded.
+Follow [`CLOUD_OUTLOOK_SETUP.md`](CLOUD_OUTLOOK_SETUP.md) for the one-time Microsoft 365 application authorization and Netlify environment settings. A scheduled function checks every five minutes, without Excel or a local computer. Only casevents@isb.edu emails whose subject contains `Upcoming Event | PGP Co 2027 | Pre Placement Talk :` are eligible. Spacing and case differences are accepted.
+
+The importer saves title, room, date and start/end time. It appends new events, preserves existing IDs when it can match the event, and retains all swap history. Cancellations, reschedules and ambiguous details require coordinator review at `/outlook-admin.html`, protected by SWAP_ADMIN_TOKEN. Microsoft credentials stay in server-side environment settings. Cloud import is disabled until configured.
 
 ## Try the prototype
 
@@ -34,7 +36,7 @@ On Windows, use `py` instead of `python3` and `.venv\Scripts\activate` to activa
 
 1. Enter your **name and PGID**, then choose **Post a swap request** or **Browse available swaps**.
 2. To post, select the event you have been assigned. Request a particular other event, or choose **Any other event**. You can add a short note.
-3. The dashboard shows both events, sections, dates, times and venues. Search and filter by offered event or date, or show flexible requests.
+3. The dashboard shows both event names, dates, times and venues. Search and filter by offered event or date, or show flexible requests.
 4. Open a card to see the poster's name and PGID. For a flexible request, select the event you will give. For a specific request, the requested event is fixed.
 5. Review both sides and **Confirm swap**. Only the first successful acceptance wins. The accepted request immediately leaves the dashboard; other connected browsers refresh every 15 seconds.
 6. Both students see the accepted swap and each other's **name and PGID** under **My requests**. The page has role and status filters. Open posts can be cancelled by their author.
@@ -43,22 +45,22 @@ Accepting also updates each student's declared sessions and cancels open posts f
 
 **Prototype limits:** PGID-only entry does not prove identity. Anyone knowing a PGID can view and act as that student. Assignments are declared by students, not institution-verified. The app records a peer agreement; it does not update an official registration system. Use synthetic data until you decide how real students will be authenticated and how swaps are approved.
 
-## Excel schedule
+## Optional legacy Excel schedule
 
-Use [`examples/session-swap-template.xlsx`](examples/session-swap-template.xlsx), containing one `Sessions` sheet with fictional data. Replace those rows with your actual catalogue. Keep the header row:
+Use a sheet named `Sessions` with four columns:
 
-| Column | Meaning |
+| Column | Example |
 | --- | --- |
-| `session_id` | Stable unique ID for this event/section. Never recycle IDs for another event. |
-| `course_id` | Event grouping ID. Sections of the same occurrence share this value. Different company events have different values. |
-| `title` | Company and event name, e.g. `Nagarro · Pre Placement Talk`. |
-| `section` | Section label, or `Main` for an event without sections. |
-| `date` | Excel date or `YYYY-MM-DD`. |
-| `start_time`, `end_time` | Excel times or 24-hour `HH:MM`, on the same day. |
-| `room` | Venue; use `TBD` if unknown. Column required, value may be blank. |
-| `instructor` | Presenter or designation. Column required, value may be blank. |
+| `title` | Nagarro · Pre Placement Talk |
+| `room` | LT 3 (or TBD) |
+| `time` | 21:30 - 22:30 |
+| `date` | 2026-10-27 (or an Excel date) |
 
-All times use `SWAP_TIMEZONE`, default **Asia/Kolkata**. One event group cannot repeat a section label. Each section of a group must have the same title. Student names and PGIDs are collected in the app, so no roster sheet is required. Optional `Students` and `Assignments` sheets are accepted for initial sample provisioning; they are not used to verify declarations.
+Use same-day 24-hour start and end times. The importer generates internal IDs from title, date and start time, supplies Main as the internal section, and leaves instructor blank. Room and end-time edits preserve IDs; changing title, date or start time creates a new event. Identical title/date/start combinations must not be duplicated.
+
+The original nine-column format in `examples/session-swap-template.xlsx` remains supported. Keep that format for an existing live catalogue if you need to preserve its original event IDs. Switching to generated IDs deactivates the old entries and can cancel their open requests; accepted history is retained.
+
+All times use `SWAP_TIMEZONE`, default **Asia/Kolkata**. Student names and PGIDs are collected in the app; no roster sheet is required.
 
 Import into a separate database from the demo:
 

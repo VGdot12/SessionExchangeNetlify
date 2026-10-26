@@ -2,6 +2,8 @@ import {
   Problem, hash, secureEqual, login, authenticate, getState, createRequest,
   acceptRequest, cancelRequest, importCatalogue,
 } from './model.mjs';
+import { adminStatus, reviewMessage, deactivateSession } from './outlook.mjs';
+import { resetOutlookScan } from './outlook-sync.mjs';
 
 const securityHeaders = {
   'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
@@ -48,6 +50,10 @@ export function createHandler(repository, options = {}) {
         }
       }
       let result, status = 200;
+      if (path.startsWith('/api/admin/outlook/')) {
+        const secret = options.adminToken || '';
+        if (secret.length < 32 || !secureEqual(request.headers.get('authorization') || '', `Bearer ${secret}`)) throw new Problem('Invalid administrator token.', 403);
+      }
       if (path === '/api/health' && method === 'GET') {
         // This confirms that storage is usable, not merely that a function exists.
         await repository.read();
@@ -63,7 +69,20 @@ export function createHandler(repository, options = {}) {
       } else if (path === '/api/admin/import' && method === 'POST') {
         const secret = options.adminToken || '';
         if (secret.length < 32 || !secureEqual(request.headers.get('authorization') || '', `Bearer ${secret}`)) throw new Problem('Invalid sync token.', 403);
+        if (options.outlook?.enabled) throw new Problem('Outlook cloud sync is enabled. Disable it before using full Excel catalogue imports.', 409);
         result = await repository.mutate(d => importCatalogue(d, data, Date.now(), timezone));
+      } else if (path === '/api/admin/outlook/status' && method === 'GET') {
+        const { data: saved } = await repository.read();
+        result = adminStatus(saved, options.outlook || { enabled: false, configured: false });
+      } else if (path === '/api/admin/outlook/run' && method === 'POST') {
+        if (!options.runOutlook) throw new Problem('Outlook cloud sync is not configured.', 503);
+        result = await options.runOutlook();
+      } else if (path === '/api/admin/outlook/review' && method === 'POST') {
+        result = await repository.mutate(d => reviewMessage(d, data));
+      } else if (path === '/api/admin/outlook/reset' && method === 'POST') {
+        result = await repository.mutate(d => resetOutlookScan(d));
+      } else if (path === '/api/admin/outlook/session' && method === 'POST') {
+        result = await repository.mutate(d => deactivateSession(d, data.session_id));
       } else if (path === '/api/state' && method === 'GET') {
         const { data: saved } = await repository.read();
         const pgid = authenticate(saved, cookieToken(request));

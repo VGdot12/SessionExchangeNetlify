@@ -1,31 +1,15 @@
-# Deploy the corrected version to Netlify
+# SessionExchange on Netlify
 
-This package matches your repository's existing `SessionExchange` folder.
+This release imports session invites directly from Outlook in the cloud. Excel and a running local computer are not needed after setup.
 
-1. Extract the ZIP.
-2. In GitHub, open `VGdot12/SessionExchange` at the repository root.
-3. Choose **Add file → Upload files**. Upload the **contents** of the extracted folder: `netlify.toml`, `START_HERE.md`, `.github` and `SessionExchange`. Do not upload another enclosing folder.
-4. Commit the changes. Existing files with matching paths will be replaced.
-5. In your existing Netlify project, trigger **Clear cache and deploy site**.
-6. Wait for **Published**, then open your site.
+1. Unzip the download. Upload its CONTENTS into the root of your existing GitHub repository. At the repository root you should see netlify.toml, package.json, netlify/, scripts/ and session_swap/. Do not put everything inside another SessionExchange folder.
+2. Keep the Netlify project connected to VGdot12/SessionExchange. Base directory is the repository root (.), build command is npm run build, publish directory is public, and functions directory is netlify/functions. The supplied netlify.toml sets these correctly.
+3. Follow CLOUD_OUTLOOK_SETUP.md to connect Microsoft 365 and enter the settings in Netlify. This version uses an application connection that needs your college Microsoft administrator's authorization. Uploading the code alone does not connect your mailbox.
+4. Redeploy the latest main-branch commit after adding the environment settings. Confirm both api and outlook-sync appear under Functions; outlook-sync should be marked Scheduled.
+5. Open https://sessionexchange.netlify.app/outlook-admin.html. Enter your SWAP_ADMIN_TOKEN, then choose Check Outlook now. Verify the first successful scan and refresh the student app.
 
-The root configuration supplies these settings:
+Only messages FROM casevents@isb.edu with a subject CONTAINING "Upcoming Event | PGP Co 2027 | Pre Placement Talk :" are eligible. Differences in spacing and letter case are allowed; other cohorts and event types are excluded. The importer reads only title, room, date and start/end time into the catalogue. It does not fetch attachments or send email.
 
-| Setting | Value |
-| --- | --- |
-| Base directory | `SessionExchange` |
-| Build command | `npm run build` |
-| Publish directory | `public` |
-| Functions directory | `netlify/functions` |
+Existing sessions and swap records remain saved. Use the private dashboard to review changes or deactivate old sample sessions. Stop any local Excel watcher when you switch to cloud sync. Full Excel imports are blocked while cloud sync is enabled.
 
-Check that your GitHub repository now shows a `netlify.toml` file directly at its root, next to the `SessionExchange` folder. This is the key difference from the first upload.
-
-The site runs entirely on Netlify: static interface, JavaScript backend and shared persistent storage. It starts with fictional sample sessions. Enter a name and PGID `26001`, or use a new PGID to register. PGID-only sign-in and self-reported assignments are prototype features.
-
-After publication, `/api/health` on your site should show `ok: true`. If the page loads but the health check fails, open the Netlify `api` function logs.
-
-[Full deployment guide](SessionExchange/DEPLOY_NETLIFY.md)
-
-The Python files are retained for local Excel and Outlook import. No Python server is needed for the Netlify website. Uploading the website does not connect Outlook or activate the previously declined email schedule.
-
-Verification: 12 Netlify API tests and 22 Python tool tests passed. Netlify's production bundler produced a Node 22 function with `/api/*` routing. The deployed site still requires your upload and redeploy; no live deployment was performed from this chat.
+Do not upload real credentials, .env files, local databases or node_modules to GitHub. Store secrets in Netlify environment variables for Functions, in the production context. No Microsoft secrets belong in frontend code.
