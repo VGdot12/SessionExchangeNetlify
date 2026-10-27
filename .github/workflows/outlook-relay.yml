@@ -1,0 +1,29 @@
+name: Deliver Outlook session invite
+
+on:
+  repository_dispatch:
+    types: [session-invite]
+  workflow_dispatch:
+
+# No repository writes, commits, deployment tokens or pull-request triggers.
+permissions:
+  contents: read
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out relay code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Deliver invite or check connection
+        env:
+          SWAP_FLOW_TOKEN: ${{ secrets.SWAP_FLOW_TOKEN }}
+        # Read the event from GitHub's event file. Never interpolate mail into shell code.
+        run: node scripts/relay-outlook-event.mjs
