@@ -13,6 +13,10 @@ INVITE_HEADERS = ['company name', 'event type', 'event date', 'event time', 'ven
 SUBJECT = re.compile(r'\bUpcoming\s+Event\s*\|\s*PGP\s+Co\s+2027\s*\|\s*Pre\s+Placement\s+Talk\s*:', re.I)
 
 
+class WorkbookValidationError(Problem):
+    """Messages contain only fixed instructions, field names and row numbers."""
+
+
 def heading(value):
     return re.sub(r'\s+', ' ', str(value or '')).strip().lower()
 
@@ -28,56 +32,81 @@ def event_date(value):
             return datetime.strptime(text, fmt).date().isoformat()
         except ValueError:
             pass
-    raise Problem('Use an Excel date, YYYY-MM-DD, DD/MM/YYYY or a date such as 27 October, 2026.')
+    raise WorkbookValidationError('Event Date/date: use an Excel date, YYYY-MM-DD, DD/MM/YYYY or a date such as 27 October, 2026.')
+
+
+def checked_session(session, row_number):
+    for field in HEADERS['Sessions']:
+        value = session.get(field, '')
+        if not isinstance(value, str) or len(value) > 200:
+            raise WorkbookValidationError(f'Row {row_number}: {field} must be text of 200 characters or fewer.')
+        if field not in ('room', 'instructor') and not value.strip():
+            raise WorkbookValidationError(f'Row {row_number}: {field} is empty. Fill in the required value.')
+    try:
+        validate({'sessions': [session]})
+    except Problem:
+        raise WorkbookValidationError(f'Row {row_number}: invalid session date or time. Use a valid date and a same-day 24-hour time range.') from None
+    return session
 
 
 def read_uploaded_workbook(path):
     from openpyxl import load_workbook
     path = Path(path)
     if path.suffix.lower() != '.xlsx' or path.stat().st_size > 10_000_000:
-        raise Problem('Upload an .xlsx workbook smaller than 10 MB.')
+        raise WorkbookValidationError('Upload an .xlsx workbook smaller than 10 MB.')
     with zipfile.ZipFile(path) as archive:
         if sum(i.file_size for i in archive.infolist()) > 30_000_000:
-            raise Problem('Workbook exceeds the 30 MB uncompressed limit.')
+            raise WorkbookValidationError('Workbook exceeds the 30 MB uncompressed limit.')
     wb = load_workbook(path, read_only=True, data_only=False)
     try:
         supported = []
+        recognized = set()
         for sheet in wb:
             if sheet.max_column and sheet.max_column > 50:
                 continue
             headers = [heading(v) for v in next(sheet.iter_rows(values_only=True), [])]
+            recognized.update(h for h in headers if h in INVITE_HEADERS or h in SIMPLE_HEADERS or h in HEADERS['Sessions'])
             required = next((h for h in (INVITE_HEADERS, HEADERS['Sessions'], SIMPLE_HEADERS) if all(k in headers for k in h)), None)
             if required:
                 supported.append((sheet, headers, required))
         preferred = [entry for entry in supported if entry[0].title == 'Sessions']
         choices = preferred or supported
-        if len(choices) != 1:
-            raise Problem('Use one session sheet, preferably named Sessions, with the documented columns.')
+        if not choices:
+            missing = ', '.join(h for h in INVITE_HEADERS if h not in recognized)
+            raise WorkbookValidationError('No supported header row found in row 1. Use Company Name, Event Type, Event Date, Event Time, Venue; '
+                                          'or title, room, time, date. Missing invite headings: ' + (missing or 'check that they are together on one sheet') + '.')
+        if len(choices) > 1:
+            raise WorkbookValidationError('Several sheets have session columns. Name the intended sheet Sessions to select it.')
         sheet, headers, required = choices[0]
         if len([h for h in headers if h]) != len(set(h for h in headers if h)):
-            raise Problem('Remove duplicate column headings.')
+            raise WorkbookValidationError('The selected sheet has duplicate column headings in row 1. Give each column a unique heading.')
         sessions = {}
+        first_rows = {}
+        data_rows = 0
+        matched_rows = 0
         rows = sheet.iter_rows(values_only=True)
         next(rows)
         for number, values in enumerate(rows, 2):
             if number > 20001:
-                raise Problem('Limit the workbook to 20,000 data rows.')
+                raise WorkbookValidationError('Limit the workbook to 20,000 data rows.')
             if not any(v is not None and str(v).strip() for v in values):
                 continue
+            data_rows += 1
             def cell(name):
                 i = headers.index(name)
                 value = values[i] if i < len(values) else None
                 if isinstance(value, str) and value.startswith('='):
-                    raise Problem(f'Row {number}: formulas are not supported in imported columns.')
+                    raise WorkbookValidationError(f'Row {number}, {name}: formulas are not supported. Replace the formula with its value.')
                 return value
             if 'subject' in headers and not SUBJECT.search(str(cell('subject') or '')):
                 continue
+            matched_rows += 1
             record = {k: cell(k) for k in required}
             try:
                 if required == INVITE_HEADERS:
                     company, kind = [str(record[k] or '').strip() for k in ('company name', 'event type')]
                     if not company or not kind:
-                        raise Problem('Company Name and Event Type are required.')
+                        raise WorkbookValidationError('Company Name and Event Type are required and cannot be empty.')
                     record = dict(title=f'{company} · {kind}', room=str(record['venue'] or '').strip(),
                                   date=event_date(record['event date']), time=str(record['event time'] or '').strip())
                     session = simple_session(record, number)
@@ -93,25 +122,53 @@ def read_uploaded_workbook(path):
                     if explicit:
                         session['session_id'] = session['course_id'] = explicit
                 session['instructor'] = ''
+                checked_session(session, number)
                 previous = sessions.get(session['session_id'])
                 if previous and previous != session:
-                    raise Problem('Conflicting rows identify the same session. Keep one current row per event.')
+                    raise WorkbookValidationError(f'Rows {first_rows[session["session_id"]]} and {number} identify the same event but have different details. Keep one current row for that event.')
                 sessions[session['session_id']] = session
+                first_rows.setdefault(session['session_id'], number)
             except Problem as error:
-                raise Problem(f'Row {number}: {error}') from error
+                if isinstance(error, WorkbookValidationError):
+                    if str(error).startswith(('Row ', 'Rows ')):
+                        raise
+                    raise WorkbookValidationError(f'Row {number}: {error}') from None
+                # simple_session's fixed format guidance contains no cell values.
+                raise WorkbookValidationError(f'Row {number}, Event Time/time: use a 24-hour range such as 21:30 - 22:30, with end after start on the same day.') from None
         # Validate every row before any network request. Only public event fields
         # and internal identifiers survive; never export the other workbook columns.
-        return {'sessions': validate({'sessions': list(sessions.values())})['sessions']}
+        if not sessions:
+            if data_rows and 'subject' in headers and not matched_rows:
+                raise WorkbookValidationError('No rows matched the Subject filter: Upcoming Event | PGP Co 2027 | Pre Placement Talk :. Check the Subject values and cohort; no session data was sent.')
+            raise WorkbookValidationError('No session rows were found below the headings. Add at least one complete session.')
+        try:
+            return {'sessions': validate({'sessions': list(sessions.values())})['sessions']}
+        except Problem:
+            raise WorkbookValidationError('Session group/section identifiers conflict between rows. Keep one title and unique section per course_id.') from None
     finally:
         wb.close()
 
 
-if __name__ == '__main__':
+def main(argv=None):
+    args = sys.argv[1:] if argv is None else argv
     try:
-        payload = read_uploaded_workbook(sys.argv[1])
-        Path(sys.argv[2]).write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+        if len(args) != 2:
+            raise WorkbookValidationError('The reader needs an input workbook and an output JSON path. Restore the supplied workflow command.')
+        payload = read_uploaded_workbook(args[0])
+        Path(args[1]).write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
         print(f'Workbook validated: {len(payload["sessions"])} sessions.')
+        return 0
+    except WorkbookValidationError as error:
+        print(f'Workbook validation failed: {error}', file=sys.stderr)
+    except FileNotFoundError:
+        print('Workbook validation failed: catalogue/sessions.xlsx was not found, or the workflow output directory is missing. Check the filename and workflow paths.', file=sys.stderr)
+    except zipfile.BadZipFile:
+        print('Workbook validation failed: the file is not a readable .xlsx workbook. Open it in Excel and use Save As → Excel Workbook (.xlsx); changing the filename extension is not enough.', file=sys.stderr)
     except Exception:
-        # Action logs can be public. Do not echo workbook values or file contents.
-        print('Workbook validation failed. Check the sheet, columns, dates, time ranges, formulas and conflicting duplicate rows against EXCEL_UPLOAD_SETUP.md.', file=sys.stderr)
-        sys.exit(1)
+        # Unexpected third-party errors may quote private workbook values.
+        print('Workbook validation failed: the reader could not open or process this workbook. Save a fresh .xlsx copy without password protection and retry. No data was sent to Netlify.', file=sys.stderr)
+    return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
