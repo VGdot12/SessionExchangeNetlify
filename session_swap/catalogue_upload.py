@@ -10,7 +10,6 @@ from .importer import HEADERS, SIMPLE_HEADERS, simple_session, validate
 from .service import Problem
 
 INVITE_HEADERS = ['company name', 'event type', 'event date', 'event time', 'venue']
-SUBJECT = re.compile(r'\bUpcoming\s+Event\s*\|\s*PGP\s+Co\s+2027\s*\|\s*Pre\s+Placement\s+Talk\s*:', re.I)
 
 
 class WorkbookValidationError(Problem):
@@ -18,7 +17,8 @@ class WorkbookValidationError(Problem):
 
 
 def heading(value):
-    return re.sub(r'\s+', ' ', str(value or '')).strip().lower()
+    text = str(value or '').replace('\ufeff', '').replace('\u200b', '')
+    return re.sub(r'\s+', ' ', text).strip().lower()
 
 
 def event_date(value):
@@ -64,43 +64,40 @@ def read_uploaded_workbook(path):
         for sheet in wb:
             if sheet.max_column and sheet.max_column > 50:
                 continue
-            headers = [heading(v) for v in next(sheet.iter_rows(values_only=True), [])]
-            recognized.update(h for h in headers if h in INVITE_HEADERS or h in SIMPLE_HEADERS or h in HEADERS['Sessions'])
-            required = next((h for h in (INVITE_HEADERS, HEADERS['Sessions'], SIMPLE_HEADERS) if all(k in headers for k in h)), None)
-            if required:
-                supported.append((sheet, headers, required))
+            for header_row, values in enumerate(sheet.iter_rows(max_row=50, max_col=50, values_only=True), 1):
+                headers = [heading(v) for v in values]
+                recognized.update(h for h in headers if h in INVITE_HEADERS or h in SIMPLE_HEADERS or h in HEADERS['Sessions'])
+                required = next((h for h in (INVITE_HEADERS, HEADERS['Sessions'], SIMPLE_HEADERS) if all(k in headers for k in h)), None)
+                if required:
+                    supported.append((sheet, headers, required, header_row))
+                    break
         preferred = [entry for entry in supported if entry[0].title == 'Sessions']
         choices = preferred or supported
         if not choices:
             missing = ', '.join(h for h in INVITE_HEADERS if h not in recognized)
-            raise WorkbookValidationError('No supported header row found in row 1. Use Company Name, Event Type, Event Date, Event Time, Venue; '
+            raise WorkbookValidationError('No supported header row found in the first 50 rows. Use Company Name, Event Type, Event Date, Event Time, Venue; '
                                           'or title, room, time, date. Missing invite headings: ' + (missing or 'check that they are together on one sheet') + '.')
         if len(choices) > 1:
             raise WorkbookValidationError('Several sheets have session columns. Name the intended sheet Sessions to select it.')
-        sheet, headers, required = choices[0]
+        sheet, headers, required, header_row = choices[0]
         if len([h for h in headers if h]) != len(set(h for h in headers if h)):
-            raise WorkbookValidationError('The selected sheet has duplicate column headings in row 1. Give each column a unique heading.')
+            raise WorkbookValidationError(f'The selected sheet has duplicate column headings in row {header_row}. Give each column a unique heading.')
         sessions = {}
         first_rows = {}
-        data_rows = 0
-        matched_rows = 0
-        rows = sheet.iter_rows(values_only=True)
-        next(rows)
-        for number, values in enumerate(rows, 2):
-            if number > 20001:
+        rows = sheet.iter_rows(min_row=header_row + 1, values_only=True)
+        for number, values in enumerate(rows, header_row + 1):
+            if number > header_row + 20000:
                 raise WorkbookValidationError('Limit the workbook to 20,000 data rows.')
             if not any(v is not None and str(v).strip() for v in values):
                 continue
-            data_rows += 1
             def cell(name):
                 i = headers.index(name)
                 value = values[i] if i < len(values) else None
                 if isinstance(value, str) and value.startswith('='):
                     raise WorkbookValidationError(f'Row {number}, {name}: formulas are not supported. Replace the formula with its value.')
                 return value
-            if 'subject' in headers and not SUBJECT.search(str(cell('subject') or '')):
-                continue
-            matched_rows += 1
+            # Manual workbook uploads import all valid session rows. Subject,
+            # Duration and other email metadata are deliberately not read.
             record = {k: cell(k) for k in required}
             try:
                 if required == INVITE_HEADERS:
@@ -134,12 +131,10 @@ def read_uploaded_workbook(path):
                         raise
                     raise WorkbookValidationError(f'Row {number}: {error}') from None
                 # simple_session's fixed format guidance contains no cell values.
-                raise WorkbookValidationError(f'Row {number}, Event Time/time: use a 24-hour range such as 21:30 - 22:30, with end after start on the same day.') from None
+                raise WorkbookValidationError(f'Row {number}, Event Time/time: enter both start and end, for example 08:30 - 09:30, using same-day 24-hour times. A single start time is not enough; Duration is not used.') from None
         # Validate every row before any network request. Only public event fields
         # and internal identifiers survive; never export the other workbook columns.
         if not sessions:
-            if data_rows and 'subject' in headers and not matched_rows:
-                raise WorkbookValidationError('No rows matched the Subject filter: Upcoming Event | PGP Co 2027 | Pre Placement Talk :. Check the Subject values and cohort; no session data was sent.')
             raise WorkbookValidationError('No session rows were found below the headings. Add at least one complete session.')
         try:
             return {'sessions': validate({'sessions': list(sessions.values())})['sessions']}
