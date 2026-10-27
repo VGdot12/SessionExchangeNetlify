@@ -8,6 +8,8 @@ export default async function api(request, context) {
     return await createHandler(repository, {
       timezone: process.env.SWAP_TIMEZONE || 'Asia/Kolkata', adminToken: process.env.SWAP_ADMIN_TOKEN || '',
       outlook: publicConfiguration(),
+      excelUpload: { enabled: process.env.SWAP_EXCEL_UPLOAD_ENABLED === '1', token: process.env.SWAP_FLOW_TOKEN || '',
+        production: deploymentContext(context) === 'production' },
       powerAutomate: { enabled:process.env.SWAP_POWER_AUTOMATE_ENABLED === '1', token:process.env.SWAP_FLOW_TOKEN || '',
         production:deploymentContext(context) === 'production' },
       runOutlook: () => {

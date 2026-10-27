@@ -6,7 +6,32 @@ A student session exchange with PGID entry, a public swap board, and private req
 
 Upload the flat-root release contents into your existing GitHub repository and follow [`START_HERE.md`](START_HERE.md). The supplied netlify.toml sets base directory `.`, build command `npm run build`, publish directory `public`, and functions directory `netlify/functions`. The JavaScript API and persistent shared state run on Netlify. No Python host is needed.
 
-## Outlook through Power Automate
+## Upload Excel to GitHub (current option)
+
+Follow [EXCEL_UPLOAD_SETUP.md](EXCEL_UPLOAD_SETUP.md). Upload the workbook as
+**catalogue/sessions.xlsx** on the default branch. The **Update sessions from Excel**
+workflow validates it online and sends only event details to a protected Netlify
+endpoint. Set SWAP_EXCEL_UPLOAD_ENABLED=1 in Netlify and put the same private
+SWAP_FLOW_TOKEN in Netlify and GitHub Actions repository secrets. Disable the
+older Outlook and Power Automate import routes while using this option.
+
+Your Company Name / Event Type / Event Date / Event Time / Venue headings work,
+as do title / room / time / date and the original nine-column schema. When Subject
+exists, the PGP Co 2027 pre-placement subject filter applies. This route cannot
+verify the original email sender. A public repo exposes the whole workbook;
+use a private repo or reduced session-only copy for private data.
+
+This route adds/updates events and retains omitted entries, student records and
+accepted history. Matching events keep existing IDs. Room corrections keep open
+swaps; schedule changes to a known event close affected open posts. Read the guide
+for stable IDs when rescheduling. These merge rules differ from the optional
+legacy full-snapshot Excel importer described below.
+
+## Optional older Outlook route through Power Automate and GitHub
+
+For the older route without Power Automate Premium, follow [GITHUB_RELAY_SETUP.md](GITHUB_RELAY_SETUP.md). The Outlook trigger and Condition stay the same; GitHub's standard connector dispatches the invite to `.github/workflows/outlook-relay.yml`, and the relay delivers it to Netlify. Store the same SWAP_FLOW_TOKEN value as a GitHub Actions repository secret. The workflow never commits mail or prints raw email contents. A manual workflow run performs a read-only connection check.
+
+## Optional direct HTTP route
 
 Follow [POWER_AUTOMATE_SETUP.md](POWER_AUTOMATE_SETUP.md). Your normal Outlook connection sends matching new emails to a protected Netlify endpoint, without Excel, a local computer or a custom Microsoft app registration. The receiving endpoint is `/api/integrations/outlook`. It uses a separate ingest-only SWAP_FLOW_TOKEN; the private `/outlook-admin.html` dashboard uses SWAP_ADMIN_TOKEN.
 

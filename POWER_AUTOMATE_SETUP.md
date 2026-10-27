@@ -1,3 +1,5 @@
+For the current route without the Premium HTTP action, use [GITHUB_RELAY_SETUP.md](GITHUB_RELAY_SETUP.md). The guide below is the optional direct HTTP route and requires a license permitting HTTP.
+
 # Connect Outlook to SessionExchange using Power Automate
 
 Use this guide instead of the previous Microsoft application-registration guide. This route uses your normal Outlook connection in Power Automate. It does not need a custom Microsoft app, Outlook administrator credentials, Excel, or a running computer. Your organization still needs to permit the connectors, and the HTTP action can require Power Automate Premium.

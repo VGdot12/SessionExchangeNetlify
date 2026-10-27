@@ -1,7 +1,7 @@
 import { Problem } from './model.mjs';
 import { ingestMessage, outlookState } from './outlook.mjs';
 
-function normalize(row) {
+export function normalizePowerAutomateMessage(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Problem('Send the Outlook trigger body as a JSON object.');
   for (const [key,limit] of [['id',2048],['subject',2000],['receivedDateTime',100]]) {
     if (typeof row[key] !== 'string' || !row[key].trim() || row[key].length > limit) throw new Problem(`Outlook payload needs ${key}. Use the full triggerBody() expression, not Body Preview.`);
@@ -20,7 +20,7 @@ function normalize(row) {
 export function receivePowerAutomate(d, payload, now = Date.now()) {
   const rows = Array.isArray(payload.value) ? payload.value : [payload];
   if (!rows.length || rows.length > 25) throw new Problem('Send 1–25 Outlook messages per request.');
-  const messages = rows.map(normalize);
+  const messages = rows.map(normalizePowerAutomateMessage);
   const counts = {updated:0,review:0,duplicate:0,older:0,ignored:0};
   for (const message of messages) counts[ingestMessage(d,message,'casevents@isb.edu',now)]++;
   const state = outlookState(d);

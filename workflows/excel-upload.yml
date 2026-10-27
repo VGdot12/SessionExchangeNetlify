@@ -1,0 +1,55 @@
+name: Update sessions from Excel
+
+on:
+  push:
+    paths:
+      - 'catalogue/sessions.xlsx'
+      - '.github/workflows/excel-upload.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: excel-catalogue-production
+  cancel-in-progress: false
+
+jobs:
+  import:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Always read the current default branch. A queued or re-run job must not
+      # pick up an old workbook. The server also rejects older run numbers.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install workbook reader
+        run: python -m pip install 'openpyxl>=3.1.5,<4'
+      - name: Read and validate workbook
+        if: hashFiles('catalogue/sessions.xlsx') != ''
+        env:
+          CATALOGUE_JSON: ${{ runner.temp }}/catalogue.json
+        run: python -m session_swap.catalogue_upload catalogue/sessions.xlsx "$CATALOGUE_JSON"
+      - name: Identify current revision
+        run: echo "CATALOGUE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Update Netlify sessions
+        if: hashFiles('catalogue/sessions.xlsx') != ''
+        env:
+          SWAP_FLOW_TOKEN: ${{ secrets.SWAP_FLOW_TOKEN }}
+          CATALOGUE_JSON: ${{ runner.temp }}/catalogue.json
+          CATALOGUE_VERSION: ${{ github.run_number }}
+        run: node scripts/deliver-catalogue.mjs
+      - name: Check connection when no workbook has been uploaded
+        if: hashFiles('catalogue/sessions.xlsx') == ''
+        env:
+          SWAP_FLOW_TOKEN: ${{ secrets.SWAP_FLOW_TOKEN }}
+        run: node scripts/deliver-catalogue.mjs --check
